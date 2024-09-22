@@ -101,7 +101,7 @@ async def delete_product_callback(callback: types.CallbackQuery, session: AsyncS
 
 @admin_router.message(F.text.lower() == "дати записів")
 async def schedule_list(message: types.Message, session: AsyncSession):
-    if message.from_user.id == int(os.getenv('ADMIN_ID')):
+    if message.from_user.id in admin_ids:
         schedules = await check_isbusy(session)
         if schedules:  # Якщо є доступні дати
             for schedule in schedules:
