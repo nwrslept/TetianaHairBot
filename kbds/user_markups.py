@@ -5,15 +5,17 @@ from aiogram.utils.keyboard import InlineKeyboardBuilder
 def start_kb(lang):
     btnLang = KeyboardButton(text=_('Змінити мову🇺🇦/🇨🇿', lang))
     btnSchedules = KeyboardButton(text=_('Доступні дати записів📅', lang))
-    btnAbout = KeyboardButton(text=_('Про нас💬', lang))
+    btnAbout = KeyboardButton(text=_('Список послуг📰', lang))
     btnReviews = KeyboardButton(text=_('Відгуки⭐', lang))
     btnBuy = KeyboardButton(text=_('Замовити професійний догляд🛒', lang))
+    btnFeedback = KeyboardButton(text=_('Зворотній звязок☎️', lang))
     
     keyboard = ReplyKeyboardMarkup(
         keyboard=[
             [btnLang, btnSchedules],
-            [btnAbout],
-            [btnReviews, btnBuy]
+            [btnBuy],
+            [btnAbout, btnReviews],
+            [btnFeedback],
         ],
         resize_keyboard=True
     )

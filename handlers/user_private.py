@@ -1,14 +1,16 @@
 import os
-from aiogram import  F, types, Router
+from aiogram import  F, types, Router, Bot
 from aiogram.filters import CommandStart, Command, or_f
 
 from aiogram.fsm.state import StatesGroup, State
 from aiogram.fsm.context import FSMContext
-from aiogram.types import Message, CallbackQuery
+from aiogram.types import Message, CallbackQuery, InputMediaPhoto, InputFile
 from sqlalchemy.ext.asyncio import AsyncSession
 from database.models import Schedule
 from database.orm_query import user_db  
 
+
+from aiogram.methods.send_message import SendMessage
 
 from database.orm_query import check_isbusy, orm_add_schedule, orm_delete_schedule, orm_get_product, orm_get_products, orm_get_reviews, orm_get_schedule, orm_get_schedules, orm_update_schedule
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -29,6 +31,9 @@ class Add(StatesGroup):
     full_name = State()
     index_adress = State()
     number_phon = State()
+
+admin_ids = os.getenv("ADMIN_ID").split(",")
+admin_ids = [int(admin_id) for admin_id in admin_ids]
 
 
 @user_private_router.message(CommandStart())
@@ -87,12 +92,24 @@ async def schedule1(message: types.Message, session: AsyncSession):
                                  }))
 
 
-@user_private_router.message(F.text == 'Про нас💬')
+@user_private_router.message(or_f(F.text == 'Список послуг📰', F.text == 'Seznam služeb📰'))
 async def aboutus(message: types.Message):
-    lang = db.get_lang(message.from_user.id)
-    await message.answer('Ляллялялял')
+    media = [
+        InputMediaPhoto(media="AgACAgIAAxkBAAIKqGbxqjyD2CbbWjlkekxraYUZktcVAAL55jEbCtWRS3D4js_QxFIoAQADAgADeQADNgQ"),
+        InputMediaPhoto(media="AgACAgIAAxkBAAIKqmbxqj99JQXBuv8L4GVX2svTNwxcAAL65jEbCtWRS-Af5JJ5QpYYAQADAgADeQADNgQ"),
+        InputMediaPhoto(media="AgACAgIAAxkBAAIKrGbxqkI9RUXcgXWSIjrXqXDrTjMYAAL75jEbCtWRS3YYBv5x6iWuAQADAgADeQADNgQ"),
+        InputMediaPhoto(media="AgACAgIAAxkBAAIKpmbxqjBukuSmpCIXdA0U5XDu6q-6AAL45jEbCtWRSxHq9ahIuqL3AQADAgADeQADNgQ"),
+    ]
+    await message.answer_media_group(media=media)
 
+# @user_private_router.message(F.photo)
+# async def photo(message: types.Message):
+#     photo_data = message.photo[-1]
+#     await message.answer(f"{photo_data}")
 
+@user_private_router.message(or_f(F.text == 'Зворотній звязок☎️', F.text == 'Zpětná vazba☎️'))
+async def feedback(message: types.Message):
+    await message.answer('Telegram: @nwrslept\nPhone:+380985170786\nInstagram:https://www.instagram.com/tetiana_hair_beauty?igsh=MWV3eWdoMjlyejk4dw==')
 
 
 @user_private_router.message(F.text == "Відгуки⭐")
@@ -102,8 +119,13 @@ async def starring_at_review(message: types.Message, session: AsyncSession):
             review.image,
             caption=review.description
         )
-            
-        
+@user_private_router.message(F.text == "Recenze⭐")
+async def starring_at_reviewcz(message: types.Message, session: AsyncSession):
+    for review in await orm_get_reviews(session):
+        await message.answer_photo(
+            review.image,
+            caption=review.description
+        )
 
 @user_private_router.message(F.text.lower() == 'objednejte si odbornou péči🛒')
 async def buycz(message: types.Message, session: AsyncSession):
@@ -137,12 +159,8 @@ async def buy(message: types.Message, session: AsyncSession):
             ),
         )
 
-
-    
-
-
 @user_private_router.callback_query(F.data.startswith('signup_'))
-async def delete_schedule(callback: types.callback_query, session: AsyncSession):
+async def delete_schedule(callback: types.callback_query, session: AsyncSession, bot: Bot):
     user = callback.from_user.username
     schedule_id= callback.data.split("_")[-1]
     schedule_for_change = await orm_get_schedule(session, int(schedule_id))
@@ -158,15 +176,12 @@ async def delete_schedule(callback: types.callback_query, session: AsyncSession)
         "time": schedule_for_change.time,
         "isbusy": True  # Змінюємо isbusy на True
     })
-
-
-    input_schedule = int(os.getenv("ADMIN_ID"))
-    if callback.from_user.id == input_schedule:
-        await callback.message.answer(f"Користувач @{user} записався на {schedule_for_change.date}, о {schedule_for_change.time}")
+    for admin_id in admin_ids:
+        await bot.send_message(admin_id, f"Користувач @{user} записався на {schedule_for_change.date}, о {schedule_for_change.time}")
     #await orm_delete_schedule(session, int(schedule_id))
 
 @user_private_router.callback_query(F.data.startswith('signup1_'))
-async def delete_schedule1(callback: types.callback_query, session: AsyncSession):
+async def delete_schedule1(callback: types.callback_query, session: AsyncSession, bot: Bot):
     user = callback.from_user.username
     schedule_id= callback.data.split("_")[-1]
     schedule_for_change = await orm_get_schedule(session, int(schedule_id))
@@ -182,35 +197,28 @@ async def delete_schedule1(callback: types.callback_query, session: AsyncSession
         "time": schedule_for_change.time,
         "isbusy": True  # Змінюємо isbusy на True
     })
-    input_schedule = int(os.getenv("ADMIN_ID"))
-    if callback.from_user.id == input_schedule:
-        await callback.message.answer(f"Користувач @{user} записався на {schedule_for_change.date}, о {schedule_for_change.time}")
-
-
+    for admin_id in admin_ids:
+        await bot.send_message(admin_id, f"Користувач @{user} записався на {schedule_for_change.date}, о {schedule_for_change.time}")
 
 @user_private_router.callback_query(F.data.startswith('send_location'))
 async def send_location(callback: types.callback_query):
     lang = db.get_lang(callback.from_user.id)
-    await callback.message.answer("https://www.google.com/maps/search/?api=1&query=49.20317636135491,17.541798210167258")
-    await callback.answer(_("Посилання на Google Maps надіслано!", lang))
+    await callback.message.answer_location(49.20317636135491, 17.541798210167258)
 
 @user_private_router.callback_query(F.data.startswith('cancel_'))
-async def cancel_schedule(callback: types.callback_query, session: AsyncSession):
+async def cancel_schedule(callback: types.callback_query, session: AsyncSession, bot: Bot):
     schedule_id = int(callback.data.split("_")[-1])
     schedule_for_change = await orm_get_schedule(session, schedule_id)
-
     await orm_update_schedule(session, schedule_id, {
         "date": schedule_for_change.date,
         "time": schedule_for_change.time,
         "isbusy": False  # Змінюємо isbusy на False
     })
-
     await callback.message.answer(f"Ви відмінили запис на {schedule_for_change.date}, о {schedule_for_change.time}")
     await callback.answer("Ваш запис скасовано!", show_alert=True)
     user = callback.from_user.username
-    input_schedule = int(os.getenv("ADMIN_ID"))
-    if callback.from_user.id == input_schedule:
-        await callback.message.answer(f"Користувач @{user} відмінив запис на {schedule_for_change.date}, о {schedule_for_change.time}")
+    for admin_id in admin_ids:
+        await bot.send_message(admin_id, f"Користувач @{user} відмінив запис на {schedule_for_change.date}, о {schedule_for_change.time}")
     schedule_data = {
         'date': schedule_for_change.date,
         'time': schedule_for_change.time
@@ -218,44 +226,34 @@ async def cancel_schedule(callback: types.callback_query, session: AsyncSession)
     await orm_add_schedule(session, schedule_data)
 
 @user_private_router.callback_query(F.data.startswith('cancel1_'))
-async def cancel1_schedule(callback: types.callback_query, session: AsyncSession):
+async def cancel1_schedule(callback: types.callback_query, session: AsyncSession, bot: Bot):
     schedule_id = int(callback.data.split("_")[-1])
     schedule_for_change = await orm_get_schedule(session, schedule_id)
-
     await orm_update_schedule(session, schedule_id, {
         "date": schedule_for_change.date,
         "time": schedule_for_change.time,
         "isbusy": False  # Змінюємо isbusy на False
     })
-
     await callback.message.answer(f"Nahrávání jste zrušili dne {schedule_for_change.date}, {schedule_for_change.time}")
     await callback.answer("Váš záznam byl zrušen!", show_alert=True)
     user = callback.from_user.username
-    input_schedule = int(os.getenv("ADMIN_ID"))
-    if callback.from_user.id == input_schedule:
-        await callback.message.answer(f"Користувач @{user} відмінив запис на {schedule_for_change.date}, о {schedule_for_change.time}")
+    for admin_id in admin_ids:
+        await bot.send_message(admin_id,f"Користувач @{user} відмінив запис на {schedule_for_change.date}, о {schedule_for_change.time}")
     schedule_data = {
         'date': schedule_for_change.date,
         'time': schedule_for_change.time
     }
     await orm_add_schedule(session, schedule_data)
 
-
-
-
-
-
-#FSM order
+#FSM
 
 @user_private_router.callback_query(F.data.startswith('order_'))
 async def user_order(callback: CallbackQuery, state: FSMContext, session: AsyncSession):
-        lang = db.get_lang(callback.from_user.id)
-        product_id= callback.data.split("_")[-1]
-        await state.update_data(id_product=product_id)
-        await callback.message.answer(text=_("Введіть ФІО. (повні)", lang), reply_markup=types.ReplyKeyboardRemove())
-        await state.set_state(Add.full_name)
-
-
+    lang = db.get_lang(callback.from_user.id)
+    product_id= callback.data.split("_")[-1]
+    await state.update_data(id_product=product_id)
+    await callback.message.answer(text=_("Введіть ФІО. (повні)", lang), reply_markup=types.ReplyKeyboardRemove())
+    await state.set_state(Add.full_name)
 
 @user_private_router.message(Add.full_name, F.text)
 async def addAdress(message: Message, state: FSMContext):
@@ -269,22 +267,17 @@ async def addAdress(message: Message, state: FSMContext):
     else:
         await message.answer(text=_("Допущена помилка❗", lang))
 
-
 @user_private_router.message(Add.index_adress, F.text)
 async def addPhon(message: Message, state: FSMContext):
     lang = db.get_lang(message.from_user.id)
     await state.update_data(index_adress=message.text)
-
     await message.answer(text=_("Введіть номер телефона починаючи з: +380, або +420",lang))
     await state.set_state(Add.number_phon)
 
-
 @user_private_router.message(Add.number_phon, F.text)
-async def add_input(message: Message, state: FSMContext, session: AsyncSession):
+async def add_input(message: Message, state: FSMContext, session: AsyncSession, bot: Bot):
     lang = db.get_lang(message.from_user.id)
     user = message.from_user.username
-
-
     num_phon = message.text.replace("+", "")
     if num_phon.isnumeric() == False:   
         await message.answer(_("Введення номера неправильне❗",lang))
@@ -307,10 +300,9 @@ async def add_input(message: Message, state: FSMContext, session: AsyncSession):
             user_db.add_user(id_product=id_product, user_id=user_id, full_name=full_name,\
                             index_adress=index_adress, number_phon=number_phon)
             await state.clear()
-            input_schedule = int(os.getenv("ADMIN_ID"))
-            if message.from_user.id == input_schedule:
+            for admin_id in admin_ids:
                 product_for_change = await orm_get_product(session, int(id_product))
-                await message.answer_photo(product_for_change.image, caption=f"Користувач @{user} оформив замовлення \
+                await bot.send_photo(admin_id,product_for_change.image, caption=f"Користувач @{user} оформив замовлення \
                                      \nФІО: {full_name}\nІндекс та адреса доставки: {index_adress} \
                                      \nНомер телефону: +{num_phon}")
             
