@@ -1,7 +1,6 @@
 import asyncio
 import os
 from aiogram import Bot, Dispatcher, types
-from aiogram.fsm.strategy import FSMStrategy
 
 
 from dotenv import find_dotenv, load_dotenv

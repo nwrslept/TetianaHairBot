@@ -1,12 +1,11 @@
-import math
 from sqlalchemy import create_engine, select, update, delete
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from database.models import Base, Notes, Product, Reviews, Schedule, Userlang, Usertable
+from database.models import Actions, Base, Cart, Notes, Product, Schedule, Userlang, Usertable
 
-from sqlalchemy import create_engine, Column, Integer, String
-from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy.orm import sessionmaker
+from sqlalchemy import create_engine
+
+from sqlalchemy.orm import sessionmaker, Session, joinedload
 
 
 
@@ -55,7 +54,9 @@ async def orm_delete_schedule(session: AsyncSession, schedule_id: int):
 async def orm_add_product(session: AsyncSession, data: dict):
     obj = Product(
         name=data["name"],
+        namecz=data["namecz"],
         description=data["description"],
+        descriptioncz=data["descriptioncz"],
         price=float(data["price"]),
         image=data["image"],
     )
@@ -92,39 +93,60 @@ async def orm_delete_product(session: AsyncSession, product_id: int):
 
 
 
-async def orm_add_review(session: AsyncSession, data: dict):
-    obj = Reviews(
-        description=data["description"],
-        image=data["image"],
+
+
+async def add_to_cart(user_id: int, product_id: int, quantity: int, session: AsyncSession):
+    # Перевіряємо, чи цей товар вже є в кошику
+    existing_cart_item = await session.execute(
+        select(Cart).where(Cart.user_id == user_id, Cart.product_id == product_id)
     )
-    session.add(obj)
+    cart_item = existing_cart_item.scalar_one_or_none()
+
+    if cart_item:
+        # Якщо товар вже в кошику, оновлюємо кількість
+        cart_item.quantity += quantity
+    else:
+        # Якщо товару ще немає в кошику, додаємо новий запис
+        new_cart_item = Cart(user_id=user_id, product_id=product_id, quantity=quantity)
+        session.add(new_cart_item)
+
     await session.commit()
 
 
-async def orm_get_reviews(session: AsyncSession):
-    query = select(Reviews)
-    result = await session.execute(query)
-    return result.scalars().all()
+async def remove_from_cart(user_id: int, product_id: int, session: AsyncSession):
+    # Шукаємо товар у кошику
+    cart_item = await session.execute(
+        select(Cart).where(Cart.user_id == user_id, Cart.product_id == product_id)
+    )
+    cart_item = cart_item.scalar_one_or_none()
+
+    if cart_item:
+        # Видаляємо товар з кошика
+        await session.delete(cart_item)
+        await session.commit()
+    else:
+        print("Товар не знайдено в кошику.")
+
+async def get_cart(user_id: int, session: Session):
+    cart_items = await session.execute(
+        select(Cart).where(Cart.user_id == user_id).options(joinedload(Cart.product))
+    )
+    return cart_items.scalars().all()  # Повертаємо всі товари у кошику
+
+async def clear_cart(user_id: int, session: AsyncSession):
+    # Отримуємо всі продукти з кошика користувача
+    cart_items = await session.execute(
+        select(Cart).where(Cart.user_id == user_id)
+    )
+    cart_items = cart_items.scalars().all()  # Отримуємо всі товари у кошику
+
+    for item in cart_items:
+        await remove_from_cart(user_id, item.product_id, session)  # Видаляємо кожен товар з кошика
 
 
-async def orm_get_review(session: AsyncSession, review_id: int):
-    query = select(Reviews).where(Reviews.id == review_id)
-    result = await session.execute(query)
-    return result.scalar()
 
 
-async def orm_update_review(session: AsyncSession, review_id: int, data):
-    query = update(Reviews).where(Reviews.id == review_id).values(
-        description=data["description"],
-        image=data["image"],)
-    await session.execute(query)
-    await session.commit()
 
-
-async def orm_delete_review(session: AsyncSession, review_id: int):
-    query = delete(Reviews).where(Reviews.id == review_id)
-    await session.execute(query)
-    await session.commit()
 
 
 async def orm_add_note(session: AsyncSession, data: dict):
@@ -160,6 +182,28 @@ async def check_isbusy(session: AsyncSession):
 
         return schedules
     
+async def orm_add_action(session: AsyncSession, data: dict):
+    obj = Actions(
+        description=data["description"],
+    )
+    session.add(obj)
+    await session.commit()
+
+async def orm_get_actions(session: AsyncSession):
+    query = select(Actions)
+    result = await session.execute(query)
+    return result.scalars().all()
+
+async def orm_get_action(session: AsyncSession, action_id: int):
+    query = select(Actions).where(Actions.id == action_id)
+    result = await session.execute(query)
+    return result.scalar()
+
+async def orm_delete_action(session: AsyncSession, action_id: int):
+    query = delete(Actions).where(Actions.id == action_id)
+    await session.execute(query)
+    await session.commit()
+    
 
 
 class Database:
@@ -178,6 +222,12 @@ class Database:
             new_user = Userlang(user_id=user_id, lang=lang)
             session.add(new_user)
             session.commit()
+            
+    def get_all_user_ids(self):
+        with self.Session() as session:
+            result = session.execute(select(Userlang.user_id))
+            user_ids = [row[0] for row in result.fetchall()]
+            return user_ids
         
     def get_lang(self, user_id):
         with self.Session() as session:
@@ -209,3 +259,5 @@ class UserDB:
             session.commit()
 
 user_db = UserDB()
+
+

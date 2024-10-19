@@ -1,5 +1,5 @@
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
-from sqlalchemy import BigInteger, Column, DateTime, ForeignKey, Integer, Numeric, String, Text, func
+from sqlalchemy import Column, DateTime, ForeignKey, Integer, Numeric, String, Text, func
 
 
 
@@ -20,16 +20,13 @@ class Product(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
     name: Mapped[str] = mapped_column(String(150), nullable=False)
+    namecz: Mapped[str] = mapped_column(String(150), nullable=False)
     description: Mapped[str] = mapped_column(Text)
+    descriptioncz: Mapped[str] = mapped_column(Text)
     price: Mapped[float] = mapped_column(Numeric(5,2), nullable=False)
     image: Mapped[str] = mapped_column(String(150))
 
-class Reviews(Base):
-    __tablename__ = 'reviews'
 
-    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
-    description: Mapped[str] = mapped_column(Text)
-    image: Mapped[str] = mapped_column(String(150))
 
 
 class Notes(Base):
@@ -54,4 +51,18 @@ class Userlang(Base):
     user_id = Column(Integer, primary_key=True)
     lang = Column(String)
 
+class Actions(Base):
+    __tablename__ = 'actions'
 
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    description: Mapped[str] = mapped_column(Text)
+
+class Cart(Base):
+    __tablename__ = "carts"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    user_id = Column(Integer, nullable=False)  # Ідентифікатор користувача
+    product_id = Column(Integer, ForeignKey("product.id"), nullable=False)  # Ідентифікатор товару
+    quantity = Column(Integer, default=1)  # Кількість товару
+
+    product = relationship("Product")  # Відношення до моделі товару

@@ -1,5 +1,5 @@
 import os
-from aiogram import  F, types, Router
+from aiogram import  F, types, Router, Bot
 from aiogram.filters import Command, StateFilter, or_f
 from aiogram.fsm.context import FSMContext
 
@@ -7,10 +7,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from aiogram.fsm.state import State, StatesGroup
 
-from database.models import Schedule
-from database.orm_query import check_isbusy, orm_add_note, orm_add_product, orm_add_review, orm_add_schedule, orm_delete_note, orm_delete_product, orm_delete_review, orm_delete_schedule, orm_get_notes, orm_get_product, orm_get_products, orm_get_reviews, orm_get_schedule, orm_get_schedules, orm_update_product, orm_update_schedule
+from database.orm_query import Database, user_db, check_isbusy, orm_add_action, orm_add_note, orm_add_product, orm_add_schedule, orm_delete_action, orm_delete_note, orm_delete_product, orm_delete_schedule, orm_get_actions, orm_get_notes, orm_get_product, orm_get_products, orm_get_schedule, orm_update_product, orm_update_schedule
 from kbds import admin_markups
 from kbds.inline import get_callback_btns
+
+db = Database('my_base.db')
 
 
 admin_router = Router()
@@ -20,6 +21,8 @@ class AddProduct(StatesGroup):
     description = State()
     price = State()
     image = State()
+    namecz = State()          # Новий стан для чеської назви
+    descriptioncz = State()
 
     product_for_change = None
 
@@ -28,6 +31,8 @@ class AddProduct(StatesGroup):
         "AddProduct:description": "Введіть опис заново:",
         "AddProduct:price": "Введіть вартість заново:",
         "AddProduct:image": "Загрузіть фото заново",
+        "AddProduct:namecz": "Введіть чеську назву:",
+        "AddProduct:descriptioncz": "Введіть чеський опис:",
     }
 
 class AddNote(StatesGroup):
@@ -35,6 +40,10 @@ class AddNote(StatesGroup):
 
     schedule_for_change = None
 
+class AddAction(StatesGroup):
+    description = State()
+
+    schedule_for_change = None
 
 class AddSchedule(StatesGroup):
     date = State()
@@ -48,11 +57,7 @@ class AddSchedule(StatesGroup):
         'AddSchedule:time': 'Введіть час заново:'
     }
 
-class AddReview(StatesGroup):
-    description = State()
-    image = State()
 
-    review_for_change = None
 
     
 admin_ids = os.getenv("ADMIN_ID").split(",")
@@ -120,28 +125,7 @@ async def delete_schedule(callback: types.callback_query, session: AsyncSession)
     await callback.message.answer('Дату видалено!')
 
 
-@admin_router.message(F.text == "Список відгуків")
-async def starring_at_review(message: types.Message, session: AsyncSession):
-    if message.from_user.id in admin_ids:
 
-
-        for review in await orm_get_reviews(session):
-            await message.answer_photo(
-            review.image,
-            caption=f"{review.description}",
-            reply_markup=get_callback_btns(
-                btns={
-                    "Видалити": f"deletereview_{review.id}",
-                }
-            ),
-        )
-
-@admin_router.callback_query(F.data.startswith('deletereview_'))
-async def delete_review(callback: types.callback_query, session: AsyncSession):
-    review_id= callback.data.split("_")[-1]
-    await orm_delete_review(session, int(review_id))
-    await callback.answer('Відгук видалено')
-    await callback.message.answer('Відгук видалено!')
 
 
 
@@ -159,41 +143,34 @@ async def starring_at_notes(message: types.Message, session: AsyncSession):
             ),
         )
             
-@admin_router.callback_query(F.data.startswith('deletenote_'))
-async def delete_note(callback: types.callback_query, session: AsyncSession):
-    review_id= callback.data.split("_")[-1]
-    await orm_delete_note(session, int(review_id))
-    await callback.answer('Замітку видалено')
-    await callback.message.answer('Замітку видалено!')
+@admin_router.message(F.text == "Список акцій")
+async def starring_at_actions(message: types.Message, session: AsyncSession):
+    if message.from_user.id in admin_ids:
+
+        for action in await orm_get_actions(session):
+            await message.answer(
+                f"{action.description}",
+                reply_markup=get_callback_btns(
+                btns={
+                    "Видалити": f"deleteaction_{action.id}",
+                }
+            ),
+        )
+            
+@admin_router.callback_query(F.data.startswith("deleteaction_"))
+async def delete_action_callback(callback: types.CallbackQuery, session: AsyncSession):
+    action_id = callback.data.split("_")[-1]
+    await orm_delete_action(session, int(action_id))
+
+    await callback.answer("Акцію видалено!")
+    await callback.message.answer("Акцію видалено!")
+
 
  #FSM
 
 
 
-@admin_router.message(StateFilter(None),F.text == 'Добавити відгук')
-async def add_review(message: types.Message, state: FSMContext):
-    if message.from_user.id in admin_ids:
-        await message.answer('Введіть опис відгуку', reply_markup=types.ReplyKeyboardRemove())
-        await state.set_state(AddReview.description)
 
-@admin_router.message(AddReview.description)
-async def add_image_review(message: types.Message, state: FSMContext):
-    await state.update_data(description=message.text)
-    await message.answer("Загрузіть зображення")
-    await state.set_state(AddReview.image)
-
-@admin_router.message(AddReview.image)
-async def add_image(message: types.Message, state: FSMContext, session: AsyncSession):
-
-    await state.update_data(image=message.photo[-1].file_id)
-    data = await state.get_data()
-        
-    await orm_add_review(session, data)
-    await message.answer("Відгук добавлено", reply_markup=admin_markups.admin_kb.as_markup(
-                              resize_keyboard=True,
-                              input_field_placeholder='Що вас цікавить?'))
-    await state.clear()
-        
 
 
 @admin_router.callback_query(StateFilter(None), F.data.startswith("changeschedule_"))
@@ -267,7 +244,6 @@ async def change_product_callback(
 @admin_router.message(StateFilter(None), F.text == "Добавити продукт")
 async def add_product(message: types.Message, state: FSMContext):
     if message.from_user.id in admin_ids:
-
         await message.answer(
             "Введіть назву продукту", reply_markup=types.ReplyKeyboardRemove()
         )
@@ -317,11 +293,24 @@ async def add_name(message: types.Message, state: FSMContext):
     else:
         if len(message.text) >= 100:
             await message.answer(
-                "Назва продукту не має перевишати 100 символів. \n Введіть заново"
+                "Назва продукту не має перевищувати 100 символів. \n Введіть заново"
             )
             return
-
         await state.update_data(name=message.text)
+    await message.answer("Введіть чеську назву продукту")
+    await state.set_state(AddProduct.namecz)  # Перехід до введення чеської назви
+
+@admin_router.message(AddProduct.namecz, or_f(F.text, F.text == "."))
+async def add_namecz(message: types.Message, state: FSMContext):
+    if message.text == ".":
+        await state.update_data(namecz=AddProduct.product_for_change.namecz)
+    else:
+        if len(message.text) >= 100:
+            await message.answer(
+                "Чеська назва продукту не має перевищувати 100 символів. \n Введіть заново"
+            )
+            return
+        await state.update_data(namecz=message.text)
     await message.answer("Введіть опис продукту")
     await state.set_state(AddProduct.description)
 
@@ -337,6 +326,16 @@ async def add_description(message: types.Message, state: FSMContext):
         await state.update_data(description=AddProduct.product_for_change.description)
     else:
         await state.update_data(description=message.text)
+    await message.answer("Введіть чеський опис продукту")
+    await state.set_state(AddProduct.descriptioncz)  # Перехід до введення чеського опису
+
+
+@admin_router.message(AddProduct.descriptioncz, or_f(F.text, F.text == "."))
+async def add_description1(message: types.Message, state: FSMContext):
+    if message.text == ".":
+        await state.update_data(descriptioncz=AddProduct.product_for_change.descriptioncz)
+    else:
+        await state.update_data(descriptioncz=message.text)
     await message.answer("Введіть вартість товару")
     await state.set_state(AddProduct.price)
 
@@ -401,6 +400,30 @@ async def add_image_product(message: types.Message, state: FSMContext, session: 
 async def add_image2(message: types.Message, state: FSMContext):
     await message.answer("Відправте фото")
 
+
+@admin_router.message(StateFilter(None),F.text == 'Добавити акцію')
+async def add_action(message: types.Message, state: FSMContext):
+    if message.from_user.id in admin_ids:
+        await message.answer('Введіть текст акції', reply_markup=types.ReplyKeyboardRemove())
+        await state.set_state(AddAction.description)
+
+@admin_router.message(AddAction.description)
+async def add_description_action(message: types.Message, state: FSMContext, session: AsyncSession, bot: Bot):
+    await state.update_data(description=message.text)
+    data = await state.get_data()
+    await orm_add_action(session, data)
+    await message.answer("Акцію добавлено", reply_markup=admin_markups.admin_kb.as_markup(
+                              resize_keyboard=True,
+                              input_field_placeholder='Що вас цікавить?'))
+    user_ids = db.get_all_user_ids()  # Отримання списку user_id
+    for user_id in user_ids:
+        lang = db.get_lang(user_id)
+        if lang == 'ua':
+            await bot.send_message(user_id, f"Появилась нова акція: {data['description']}")
+        else:
+            await bot.send_message(user_id, f"Objevila se nová akce: {data['description']}")
+
+    await state.clear()
 
 
 @admin_router.message(StateFilter(None),F.text == 'Добавити замітку')

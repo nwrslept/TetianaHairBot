@@ -4,15 +4,12 @@ from aiogram.filters import CommandStart, Command, or_f
 
 from aiogram.fsm.state import StatesGroup, State
 from aiogram.fsm.context import FSMContext
-from aiogram.types import Message, CallbackQuery, InputMediaPhoto, InputFile
+from aiogram.types import Message, CallbackQuery, InputMediaPhoto
 from sqlalchemy.ext.asyncio import AsyncSession
-from database.models import Schedule
-from database.orm_query import user_db  
+from database.orm_query import clear_cart, get_cart, orm_get_actions, user_db  
 
 
-from aiogram.methods.send_message import SendMessage
-
-from database.orm_query import check_isbusy, orm_add_schedule, orm_delete_schedule, orm_get_product, orm_get_products, orm_get_reviews, orm_get_schedule, orm_get_schedules, orm_update_schedule
+from database.orm_query import check_isbusy, orm_add_schedule, orm_get_product, orm_get_products, orm_get_schedule, orm_update_schedule, add_to_cart, get_cart, remove_from_cart
 from sqlalchemy.ext.asyncio import AsyncSession
 import kbds.user_markups as nav
 
@@ -24,6 +21,10 @@ from translations import _
 user_private_router = Router()
 db = Database('my_base.db')
 
+class OrderInfo(StatesGroup):
+    full_name = State()
+    address = State()
+    phone_number = State()
 
 
 class Add(StatesGroup):
@@ -31,6 +32,8 @@ class Add(StatesGroup):
     full_name = State()
     index_adress = State()
     number_phon = State()
+
+    product_for_change = None
 
 admin_ids = os.getenv("ADMIN_ID").split(",")
 admin_ids = [int(admin_id) for admin_id in admin_ids]
@@ -63,15 +66,59 @@ async def setLanguage(callback: types.callback_query):
 
 @user_private_router.message(Command('id'))
 async def cmd_id(message: types.Message):
-    await message.answer(f'{message.from_user.id}')
+    await message.edit_text(f'{message.from_user.id}')
 
+@user_private_router.message(or_f(F.text.lower () == "найчастіші запитання❓", F.text.lower () == 'nejčastější dotazy❓'))
+async def info(message: types.Message):
+    lang = db.get_lang(message.from_user.id)
+    await message.answer(_("Найчастіші запитання:",lang))
+    await message.answer_photo("AgACAgIAAxkBAAIKqGbxqjyD2CbbWjlkekxraYUZktcVAAL55jEbCtWRS3D4js_QxFIoAQADAgADeQADNgQ")
+    await message.answer(_('Опис процедур:',lang), reply_markup=nav.info_kb(lang))
+
+@user_private_router.callback_query(F.data.startswith('_botox'))
+async def botox(callback: types.callback_query):
+    lang = db.get_lang(callback.from_user.id)
+    await callback.message.edit_text(_('Ботокс - це...',lang),reply_markup=nav.back_kb(lang))
+
+@user_private_router.callback_query(F.data.startswith('_keratin'))
+async def keratin(callback: types.callback_query):
+    lang = db.get_lang(callback.from_user.id)
+    await callback.message.edit_text(_('Кератин - це...', lang),reply_markup=nav.back_kb(lang))
+
+@user_private_router.callback_query(F.data.startswith('_collagen'))
+async def collagen(callback: types.callback_query):
+    lang = db.get_lang(callback.from_user.id)
+    await callback.message.edit_text(_('Коллаген - це...', lang),reply_markup=nav.back_kb(lang))
+
+@user_private_router.callback_query(F.data.startswith('_coldreg'))
+async def coldreg(callback: types.callback_query):
+    lang = db.get_lang(callback.from_user.id)
+    await callback.message.edit_text(_('Холодне відновлення - це...',lang),reply_markup=nav.back_kb(lang))
+
+@user_private_router.callback_query(F.data.startswith('_back'))
+async def infoback(callback: types.callback_query):
+    lang = db.get_lang(callback.from_user.id)
+    await callback.message.edit_text(_('Виберіть процедуру:',lang), reply_markup=nav.info_kb(lang))
+
+
+
+
+@user_private_router.message(F.text == ("Акції🎁"))
+async def starring_at_actions(message: types.Message, session: AsyncSession):
+    for action in await orm_get_actions(session):
+        await message.answer(action.description)
+
+@user_private_router.message(F.text == ("Akce🎁"))
+async def starring_at_actionscz(message: types.Message, session: AsyncSession):
+    for action in await orm_get_actions(session):
+        await message.answer(action.description)
     
 
 @user_private_router.message(or_f(F.text.lower() == "змінити мову🇺🇦/🇨🇿", F.text.lower() == 'změňte jazyk🇺🇦/🇨🇿'))
 async def menu_cmd(message: types.Message):
     await message.answer("Виберіть мову\nVyber jazyk:", reply_markup=nav.langMenu)
 
-@user_private_router.message((F.text.lower() == "доступні дати записів📅"))
+@user_private_router.message((F.text.lower() == "записатись на прийом📅"))
 async def schedule(message: types.Message, session: AsyncSession):
     schedules = await check_isbusy(session)
     if schedules:  # Якщо є доступні дати
@@ -80,8 +127,9 @@ async def schedule(message: types.Message, session: AsyncSession):
                                  reply_markup=get_callback_btns(btns={
                                       'записатись': f'signup_{schedule.id}'
                                  }))
+    await message.answer('А також можна замовити майстра до собе додому: @Tetiana_Senkiv')
 
-@user_private_router.message((F.text.lower() == "dostupné termíny nahrávání📅"))
+@user_private_router.message((F.text.lower() == "domluvit si schůzku📅"))
 async def schedule1(message: types.Message, session: AsyncSession):
     schedules = await check_isbusy(session)
     if schedules:  # Якщо є доступні дати
@@ -90,6 +138,7 @@ async def schedule1(message: types.Message, session: AsyncSession):
                                  reply_markup=get_callback_btns(btns={
                                       'přihlásit se': f'signup1_{schedule.id}'
                                  }))
+    await message.answer('A mistra si můžete objednat i domů: @Tetiana_Senkiv')
 
 
 @user_private_router.message(or_f(F.text == 'Список послуг📰', F.text == 'Seznam služeb📰'))
@@ -109,55 +158,185 @@ async def aboutus(message: types.Message):
 
 @user_private_router.message(or_f(F.text == 'Зворотній звязок☎️', F.text == 'Zpětná vazba☎️'))
 async def feedback(message: types.Message):
-    await message.answer('Telegram: @nwrslept\nPhone:+380985170786\nInstagram:https://www.instagram.com/tetiana_hair_beauty?igsh=MWV3eWdoMjlyejk4dw==')
+    await message.answer('Telegram: @Tetiana_Senkiv\nPhone:+420792711477/+380685187690\nInstagram:https://www.instagram.com/tetiana_hair_beauty?igsh=MWV3eWdoMjlyejk4dw==')
 
 
-@user_private_router.message(F.text == "Відгуки⭐")
-async def starring_at_review(message: types.Message, session: AsyncSession):
-    for review in await orm_get_reviews(session):
-        await message.answer_photo(
-            review.image,
-            caption=review.description
-        )
-@user_private_router.message(F.text == "Recenze⭐")
-async def starring_at_reviewcz(message: types.Message, session: AsyncSession):
-    for review in await orm_get_reviews(session):
-        await message.answer_photo(
-            review.image,
-            caption=review.description
-        )
-
-@user_private_router.message(F.text.lower() == 'objednejte si odbornou péči🛒')
-async def buycz(message: types.Message, session: AsyncSession):
+@user_private_router.message(or_f(F.text == "Відгуки⭐", F.text == 'Recenze⭐'))
+async def reviews(message: types.Message):
     lang = db.get_lang(message.from_user.id)
-    await message.answer(_("Замовити професійний догляд🛒:", lang))
-    for product in await orm_get_products(session):
-        await message.answer_photo(
-            product.image,
-            caption=f"{product.name}\
-                    \n{product.description}\nCena: {round(product.price, 2)}kč",
+    media = [
+        InputMediaPhoto(media=_("AgACAgIAAxkBAAIKqGbxqjyD2CbbWjlkekxraYUZktcVAAL55jEbCtWRS3D4js_QxFIoAQADAgADeQADNgQ", lang)),
+    ]
+    await message.answer_media_group(media=media)
+
+
+
+
+
+
+@user_private_router.message(or_f(F.text.lower() == "замовити професійний догляд🛒", F.text.lower() == 'objednejte si odbornou péči🛒'))
+async def buy(message: types.Message, session: AsyncSession, state: FSMContext):
+    lang = db.get_lang(message.from_user.id)
+    products = await orm_get_products(session)
+    
+    # Зберегти всі продукти в стан
+    await state.update_data(products=[product.id for product in products], current_index=0)
+
+    # Показати перший продукт
+    if products:
+        reply_message = await show_product(message, products[0], lang, 0)
+        await state.update_data(reply_message_id=reply_message.message_id)
+
+async def show_product(message: types.Message, product, lang, index):
+    
+    if lang == 'ua':
+        reply_message = await message.answer_photo(
+        product.image,
+        caption=f"{product.name}\n{product.description}\n{round(product.price, 2)}kč",
+        reply_markup=get_callback_btns(
+            btns={
+                _("⬅️", lang): f"prev_{index}",
+                _("➡️", lang): f"next_{index}",
+                _("Додати до корзини", lang): f"add_to_cart_{product.id}",
+                _("Корзина🛒", lang): "viewcart_",
+                
+            }
+        ),
+    )
+    else:
+        reply_message = await message.answer_photo(
+        product.image,
+        caption=f"{product.namecz}\n{product.descriptioncz}\n{round(product.price, 2)}kč",
+        reply_markup=get_callback_btns(
+            btns={
+                _("⬅️", lang): f"prev_{index}",
+                _("➡️", lang): f"next_{index}",
+                _("Додати до корзини", lang): f"add_to_cart_{product.id}",
+                _("Корзина🛒", lang): "viewcart_",
+                
+            }
+        ),
+    )
+
+    return reply_message  # Повертаємо надіслане повідомлення
+
+@user_private_router.callback_query(F.data.startswith('prev_'))
+async def show_previous(callback: types.CallbackQuery, state: FSMContext, session: AsyncSession):
+    lang = db.get_lang(callback.from_user.id)
+    data = await state.get_data()
+    current_index = data.get('current_index', 0)
+    products = data.get('products', [])
+
+    if current_index > 0:
+        current_index -= 1
+        await state.update_data(current_index=current_index)
+        await update_product_message(callback.message, products[current_index], lang, current_index, session)
+
+@user_private_router.callback_query(F.data.startswith('next_'))
+async def show_next(callback: types.CallbackQuery, state: FSMContext, session: AsyncSession):
+    lang = db.get_lang(callback.from_user.id)
+    data = await state.get_data()
+    current_index = data.get('current_index', 0)
+    products = data.get('products', [])
+
+    if current_index < len(products) - 1:
+        current_index += 1
+        await state.update_data(current_index=current_index)
+        await update_product_message(callback.message, products[current_index], lang, current_index, session)
+
+async def update_product_message(message: types.Message, product_id: int, lang, index: int, session: AsyncSession):
+    # Отримуємо продукт з бази даних за ID
+    product = await orm_get_product(session, product_id)
+    
+    if product:
+        if lang == 'ua': # Перевіряємо, чи продукт існує
+            await message.edit_media(
+                types.InputMediaPhoto(
+                    media=product.image,  # Замість product.image використовуйте media
+                    caption=f"{product.name}\n{product.description}\n{round(product.price, 2)}kč"
+                ),
+                reply_markup=get_callback_btns(
+                    btns={
+                        _("⬅️", lang): f"prev_{index}",
+                        _("➡️", lang): f"next_{index}",
+                        _("Додати до корзини", lang): f"add_to_cart_{product.id}",
+                        _("Корзина🛒", lang): "viewcart_",
+                    }
+                )
+            )
+        else:
+            await message.edit_media(
+            types.InputMediaPhoto(
+                media=product.image,  # Замість product.image використовуйте media
+                caption=f"{product.namecz}\n{product.descriptioncz}\n{round(product.price, 2)}kč"
+            ),
             reply_markup=get_callback_btns(
                 btns={
-                    _("Замовити",lang): f"order_{product.id}",
+                    _("⬅️", lang): f"prev_{index}",
+                    _("➡️", lang): f"next_{index}",
+                    _("Додати до корзини", lang): f"add_to_cart_{product.id}",
+                    _("Корзина🛒", lang): "viewcart_",
                 }
-            ),
+            )
         )
 
-@user_private_router.message(F.text.lower() == "замовити професійний догляд🛒")
-async def buy(message: types.Message, session: AsyncSession):
-    lang = db.get_lang(message.from_user.id)
-    await message.answer(_("Замовити професійний догляд🛒:", lang))
-    for product in await orm_get_products(session):
-        await message.answer_photo(
-            product.image,
-            caption=f"{product.name}\
-                    \n{product.description}\nЦіна: {round(product.price, 2)}kč",
-            reply_markup=get_callback_btns(
+
+
+
+
+
+
+@user_private_router.callback_query(F.data.startswith('remove_from_cart_'))
+async def remove_from_cart1(callback: types.CallbackQuery, session: AsyncSession):
+    lang = db.get_lang(callback.from_user.id)
+    user_id = callback.from_user.id
+    product_id = int(callback.data.split('_')[-1])
+    
+    # Видалити товар з кошика
+    await remove_from_cart(user_id, product_id, session)
+    await callback.message.answer(_("Товар видалено з корзини", lang))
+
+
+@user_private_router.callback_query(F.data.startswith('add_to_cart_'))
+async def add_to_cart1(callback: types.CallbackQuery, session: AsyncSession):
+    lang = db.get_lang(callback.from_user.id)
+    user_id = callback.from_user.id
+    product_id = int(callback.data.split('_')[-1])
+    
+    # Додати товар до корзини через базу даних
+    await add_to_cart(user_id, product_id, 1, session)
+    await callback.message.answer(_("Товар додано до корзини!", lang))
+
+@user_private_router.callback_query(F.data.startswith('viewcart_'))
+async def view_cart(callback: types.CallbackQuery, session: AsyncSession):
+    lang = db.get_lang(callback.from_user.id)
+    user_id = callback.from_user.id
+    
+    # Отримати вміст кошика з бази даних
+    cart_items = await get_cart(user_id, session)
+    
+    if not cart_items:
+        await callback.message.answer(_("Ваша корзина порожня", lang))
+    else:
+        for item in cart_items:
+            product = item.product  # Отримуємо деталі товару через відношення
+            await callback.message.answer_photo(
+                product.image,
+                caption=f"{product.name}\n{product.description}\n{round(product.price, 2)}kč",
+                reply_markup=get_callback_btns(
+                    btns={_("Видалити з корзини", lang): f"remove_from_cart_{product.id}"}
+                ),
+            )
+        await callback.message.answer(_("Ваша корзина:",lang),
+        reply_markup=get_callback_btns(
                 btns={
-                    _("Замовити",lang): f"order_{product.id}",
+                    _("Оформити замовлення", lang): f"order_{product.id}",
                 }
-            ),
-        )
+            ))
+        
+
+
+
 
 @user_private_router.callback_query(F.data.startswith('signup_'))
 async def delete_schedule(callback: types.callback_query, session: AsyncSession, bot: Bot):
@@ -166,7 +345,7 @@ async def delete_schedule(callback: types.callback_query, session: AsyncSession,
     schedule_for_change = await orm_get_schedule(session, int(schedule_id))
     await callback.message.answer(f"Ви успішно записались на {schedule_for_change.date}, о {schedule_for_change.time}\
                                   \nЧекаємо вас за адресою: Hlavni 1215,\
-                                  \nЗа додатковою інформацією: @nwrslept", 
+                                  \nЗа додатковою інформацією: @Tetiana_Senkiv", 
                                   reply_markup=get_callback_btns(btns={
                                      'Отримати геолокацію': f'send_location',
                                     'Відмінити запис': f'cancel_{schedule_id}',
@@ -187,7 +366,7 @@ async def delete_schedule1(callback: types.callback_query, session: AsyncSession
     schedule_for_change = await orm_get_schedule(session, int(schedule_id))
     await callback.message.answer(f"Úspěšně jste se zaregistrovali do {schedule_for_change.date}, {schedule_for_change.time}\
                                   \nČekáme na vás na Hlavní 1215,\
-                                  \nDalší informace: @nwrslept", 
+                                  \nDalší informace: @Tetiana_Senkiv", 
                                   reply_markup=get_callback_btns(btns={
                                      'Získejte geolokaci': f'send_location',
                                     'Zrušit zadání': f'cancel1_{schedule_id}',
@@ -248,62 +427,87 @@ async def cancel1_schedule(callback: types.callback_query, session: AsyncSession
 #FSM
 
 @user_private_router.callback_query(F.data.startswith('order_'))
-async def user_order(callback: CallbackQuery, state: FSMContext, session: AsyncSession):
+async def process_order(callback: types.CallbackQuery, session: AsyncSession, state: FSMContext):
+    data_parts = callback.data.split('_')
     lang = db.get_lang(callback.from_user.id)
-    product_id= callback.data.split("_")[-1]
-    await state.update_data(id_product=product_id)
-    await callback.message.answer(text=_("Введіть ФІО. (повні)", lang), reply_markup=types.ReplyKeyboardRemove())
-    await state.set_state(Add.full_name)
 
-@user_private_router.message(Add.full_name, F.text)
-async def addAdress(message: Message, state: FSMContext):
+    if len(data_parts) < 2 or not data_parts[1].isdigit():
+        await callback.answer("Помилка: недійсний формат замовлення.", show_alert=True)
+        return
+
+    product_id = int(data_parts[1])
+    
+    # Зберігаємо ID продукту в стані
+    await state.update_data(product_id=product_id)
+    
+    # Запитуємо користувача про його ФІО
+    await callback.message.answer(_("Введіть ФІО. (повні)",lang))
+    await state.set_state(OrderInfo.full_name)  # Встановлюємо стан для отримання ФІО
+
+
+
+@user_private_router.message(OrderInfo.full_name)
+async def process_full_name(message: types.Message, state: FSMContext):
+    full_name = message.text
     lang = db.get_lang(message.from_user.id)
-    name = message.text.replace(" ", "")    
-    if name.isalpha() == True:
-        await state.update_data(full_name=message.text.title())
 
-        await message.answer(text=_("Укажіть індекс і адресу доставки", lang))
-        await state.set_state(Add.index_adress)
-    else:
-        await message.answer(text=_("Допущена помилка❗", lang))
+    await state.update_data(full_name=full_name)  # Зберігаємо ФІО в стані
+    
+    await message.answer(_("Укажіть індекс і адресу доставки",lang))
+    await state.set_state(OrderInfo.address)  # Встановлюємо стан для адреси
 
-@user_private_router.message(Add.index_adress, F.text)
-async def addPhon(message: Message, state: FSMContext):
+@user_private_router.message(OrderInfo.address)
+async def process_address(message: types.Message, state: FSMContext):
+    address = message.text
     lang = db.get_lang(message.from_user.id)
-    await state.update_data(index_adress=message.text)
-    await message.answer(text=_("Введіть номер телефона починаючи з: +380, або +420",lang))
-    await state.set_state(Add.number_phon)
 
-@user_private_router.message(Add.number_phon, F.text)
-async def add_input(message: Message, state: FSMContext, session: AsyncSession, bot: Bot):
+    await state.update_data(address=address)  # Зберігаємо адресу в стані
+    
+    await message.answer(_("Введіть номер телефону починаючи з: +380, або +420",lang))
+    await state.set_state(OrderInfo.phone_number)  # Встановлюємо стан для номера телефону
+
+@user_private_router.message(OrderInfo.phone_number)
+async def process_phone_number(message: types.Message, state: FSMContext, session: AsyncSession, bot: Bot):
+    phone_number = message.text
+    await state.update_data(phone_number=phone_number)  # Зберігаємо номер телефону в стані
+
     lang = db.get_lang(message.from_user.id)
-    user = message.from_user.username
-    num_phon = message.text.replace("+", "")
-    if num_phon.isnumeric() == False:   
-        await message.answer(_("Введення номера неправильне❗",lang))
-    else:
-        if len(num_phon) != 12:
-            await message.answer(text=_("Допущена помилка",lang))
-        else:
-            await state.update_data(number_phon=message.text)
-            await message.answer(text=_("Заказ оформлено, за додатковою інформацією: @nwrslept",lang), reply_markup=nav.start_kb(lang))
+    user_data = await state.get_data()  # Отримуємо всі дані
+    full_name = user_data.get('full_name')
+    address = user_data.get('address')
 
-            dict_data_user = await state.get_data()
-            list_data_user = []
-            for k, v in dict_data_user.items():
-                list_data_user.append(v)
-            user_id = message.from_user.id
-            id_product = list_data_user[0]
-            full_name = list_data_user[1]
-            index_adress = list_data_user[2]
-            number_phon = list_data_user[3]
-            user_db.add_user(id_product=id_product, user_id=user_id, full_name=full_name,\
-                            index_adress=index_adress, number_phon=number_phon)
-            await state.clear()
-            for admin_id in admin_ids:
-                product_for_change = await orm_get_product(session, int(id_product))
-                await bot.send_photo(admin_id,product_for_change.image, caption=f"Користувач @{user} оформив замовлення \
-                                     \nФІО: {full_name}\nІндекс та адреса доставки: {index_adress} \
-                                     \nНомер телефону: +{num_phon}")
-            
-                
+    # Отримуємо ім'я користувача
+    username = message.from_user.username if message.from_user.username else "Немає імені користувача"
+    
+    cart_items = await get_cart(message.from_user.id, session)  # Отримуємо вміст кошика
+
+    # Формуємо список назв продуктів
+    product_names = []
+    for item in cart_items:
+        product = item.product  # Отримуємо деталі товару через відношення
+        product_names.append(product.name)  # Додаємо назву продукту в список
+
+    # Формуємо повідомлення
+    products_message = "\n".join(product_names) if product_names else "Кошик порожній."
+    order_summary = (f"Нове замовлення від користувача: @{username}\n"
+                     f"ФІО: {full_name}\n"
+                     f"Адреса: {address}\n"
+                     f"Телефон: {phone_number}\n"
+                     f"Продукти:\n{products_message}")
+
+    # Надсилаємо інформацію адміну
+    for admin_id in admin_ids:
+        await bot.send_message(admin_id, order_summary)
+    await message.answer(_("Заказ оформлено, за додатковою інформацією: @Tetiana_Senkiv",lang))
+    # Очищаємо кошик
+    await clear_cart(message.from_user.id, session)  # Використовуємо clear_cart, який в свою чергу використовує remove_from_cart
+
+    # Завершення стану
+    await state.clear()  # Завершуємо стан
+
+
+
+
+
+
+
