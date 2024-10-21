@@ -56,6 +56,7 @@ class Actions(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
     description: Mapped[str] = mapped_column(Text)
+    descriptioncz: Mapped[str] = mapped_column(Text)
 
 class Cart(Base):
     __tablename__ = "carts"

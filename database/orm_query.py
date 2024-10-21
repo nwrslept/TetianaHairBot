@@ -185,6 +185,8 @@ async def check_isbusy(session: AsyncSession):
 async def orm_add_action(session: AsyncSession, data: dict):
     obj = Actions(
         description=data["description"],
+        descriptioncz=data["descriptioncz"],
+
     )
     session.add(obj)
     await session.commit()

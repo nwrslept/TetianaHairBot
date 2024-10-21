@@ -42,6 +42,7 @@ class AddNote(StatesGroup):
 
 class AddAction(StatesGroup):
     description = State()
+    descriptioncz = State()
 
     schedule_for_change = None
 
@@ -401,29 +402,46 @@ async def add_image2(message: types.Message, state: FSMContext):
     await message.answer("Відправте фото")
 
 
-@admin_router.message(StateFilter(None),F.text == 'Добавити акцію')
+@admin_router.message(StateFilter(None), F.text == 'Добавити акцію')
 async def add_action(message: types.Message, state: FSMContext):
     if message.from_user.id in admin_ids:
-        await message.answer('Введіть текст акції', reply_markup=types.ReplyKeyboardRemove())
+        await message.answer('Введіть текст акції українською мовою', reply_markup=types.ReplyKeyboardRemove())
         await state.set_state(AddAction.description)
 
 @admin_router.message(AddAction.description)
-async def add_description_action(message: types.Message, state: FSMContext, session: AsyncSession, bot: Bot):
+async def add_description_ua_action(message: types.Message, state: FSMContext):
     await state.update_data(description=message.text)
+    await message.answer('Введіть текст акції чеською мовою')
+    await state.set_state(AddAction.descriptioncz)
+
+@admin_router.message(AddAction.descriptioncz)
+async def add_description_cz_action(message: types.Message, state: FSMContext, session: AsyncSession, bot: Bot):
+    await state.update_data(descriptioncz=message.text)
     data = await state.get_data()
-    await orm_add_action(session, data)
-    await message.answer("Акцію добавлено", reply_markup=admin_markups.admin_kb.as_markup(
-                              resize_keyboard=True,
-                              input_field_placeholder='Що вас цікавить?'))
-    user_ids = db.get_all_user_ids()  # Отримання списку user_id
+    
+    try:
+        await orm_add_action(session, data)
+        await session.commit()  # Коміт змін
+        await message.answer("Акцію додано", reply_markup=admin_markups.admin_kb.as_markup(
+                                  resize_keyboard=True,
+                                  input_field_placeholder='Що вас цікавить?'))
+    except Exception as e:
+        await message.answer(f"Сталася помилка при додаванні акції: {str(e)}")
+
+    
+    # Отримання списку користувачів
+    user_ids = db.get_all_user_ids()
+    
+    # Надсилання повідомлень користувачам на відповідній мові
     for user_id in user_ids:
         lang = db.get_lang(user_id)
         if lang == 'ua':
             await bot.send_message(user_id, f"Появилась нова акція: {data['description']}")
         else:
-            await bot.send_message(user_id, f"Objevila se nová akce: {data['description']}")
+            await bot.send_message(user_id, f"Objevila se nová akce: {data['descriptioncz']}")
 
     await state.clear()
+
 
 
 @admin_router.message(StateFilter(None),F.text == 'Добавити замітку')

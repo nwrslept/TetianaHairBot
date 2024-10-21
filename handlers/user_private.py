@@ -4,7 +4,7 @@ from aiogram.filters import CommandStart, Command, or_f
 
 from aiogram.fsm.state import StatesGroup, State
 from aiogram.fsm.context import FSMContext
-from aiogram.types import Message, CallbackQuery, InputMediaPhoto
+from aiogram.types import Message, CallbackQuery, InputMediaPhoto, InlineKeyboardButton, InlineKeyboardMarkup
 from sqlalchemy.ext.asyncio import AsyncSession
 from database.orm_query import clear_cart, get_cart, orm_get_actions, user_db  
 
@@ -72,33 +72,42 @@ async def cmd_id(message: types.Message):
 async def info(message: types.Message):
     lang = db.get_lang(message.from_user.id)
     await message.answer(_("Найчастіші запитання:",lang))
-    await message.answer_photo("AgACAgIAAxkBAAIKqGbxqjyD2CbbWjlkekxraYUZktcVAAL55jEbCtWRS3D4js_QxFIoAQADAgADeQADNgQ")
+    media = [
+        InputMediaPhoto(media=_("AgACAgIAAxkBAAIRkGcWFeC-pdOyxVV4G3MEHWBd3lIjAAKE7TEb0IuwSMbORcXSdEiIAQADAgADeAADNgQ", lang)),
+        InputMediaPhoto(media=_("AgACAgIAAxkBAAIRkmcWFeYXzJYYjqDXdR2IdHCxOIHPAAKG7TEb0IuwSOuCb3_v6ycoAQADAgADeAADNgQ", lang)),
+        InputMediaPhoto(media=_("AgACAgIAAxkBAAIRlGcWFekgyVs3Hajkt6N4U9nFP8xYAAKH7TEb0IuwSIqI8KBKuKNvAQADAgADeAADNgQ", lang)),
+        InputMediaPhoto(media=_("AgACAgIAAxkBAAIRlmcWFe5_v_CNvo29MdntSXhu7IrBAAKJ7TEb0IuwSCeGKDUFoy_jAQADAgADeAADNgQ", lang)),
+        InputMediaPhoto(media=_("AgACAgIAAxkBAAIRmGcWFfLhNo6p9skV49XliP3kWkY8AAKL7TEb0IuwSD5HU9sanVUSAQADAgADeAADNgQ", lang)),
+        InputMediaPhoto(media=_("AgACAgIAAxkBAAIRmmcWFfd-rbvLjNnVR2PuylxWgJF8AAKN7TEb0IuwSByl6hyhXzlRAQADAgADeAADNgQ", lang)),
+    ]
+    await message.answer_media_group(media=media)
+
     await message.answer(_('Опис процедур:',lang), reply_markup=nav.info_kb(lang))
 
 @user_private_router.callback_query(F.data.startswith('_botox'))
 async def botox(callback: types.callback_query):
     lang = db.get_lang(callback.from_user.id)
-    await callback.message.edit_text(_('Ботокс - це...',lang),reply_markup=nav.back_kb(lang))
+    await callback.message.edit_text(_('Ботокс \n- Відновлення структури \n- Зміцнення волосся \n- Зменшення пухнастості\n- Розгладжування\n- Захист від пошкоджень ',lang),reply_markup=nav.back_kb(lang))
 
 @user_private_router.callback_query(F.data.startswith('_keratin'))
 async def keratin(callback: types.callback_query):
     lang = db.get_lang(callback.from_user.id)
-    await callback.message.edit_text(_('Кератин - це...', lang),reply_markup=nav.back_kb(lang))
+    await callback.message.edit_text(_('Кератин\n- Відновлення пошкодженного волосся\n- Випрямлення волосся\n- Насичення волосся білком\n- Надання блиску\n-  Легкість у догляді\n- Зменшення пухнастості ', lang),reply_markup=nav.back_kb(lang))
 
 @user_private_router.callback_query(F.data.startswith('_collagen'))
 async def collagen(callback: types.callback_query):
     lang = db.get_lang(callback.from_user.id)
-    await callback.message.edit_text(_('Коллаген - це...', lang),reply_markup=nav.back_kb(lang))
+    await callback.message.edit_text(_("Колаген \n- Зволоження волосся \n- Зміцнення волосся \n- Покращення текстури волосся\n- Запобігання старінню волосся\n- Збільшення об'єму\n- Відновлення пошкодженої структури ", lang),reply_markup=nav.back_kb(lang))
 
 @user_private_router.callback_query(F.data.startswith('_coldreg'))
 async def coldreg(callback: types.callback_query):
     lang = db.get_lang(callback.from_user.id)
-    await callback.message.edit_text(_('Холодне відновлення - це...',lang),reply_markup=nav.back_kb(lang))
+    await callback.message.edit_text(_("Холодне вілновлення  \n- Насичує\n- Зволожує\n- Пом'якшує\n- Усуває сухість і сплутаність\n- Покращує з середини\n- Набуде блиску і шовковистості \n- Усуне ламкість",lang),reply_markup=nav.back_kb(lang))
 
 @user_private_router.callback_query(F.data.startswith('_back'))
 async def infoback(callback: types.callback_query):
     lang = db.get_lang(callback.from_user.id)
-    await callback.message.edit_text(_('Виберіть процедуру:',lang), reply_markup=nav.info_kb(lang))
+    await callback.message.edit_text(_('Опис процедур:',lang), reply_markup=nav.info_kb(lang))
 
 
 
@@ -111,7 +120,7 @@ async def starring_at_actions(message: types.Message, session: AsyncSession):
 @user_private_router.message(F.text == ("Akce🎁"))
 async def starring_at_actionscz(message: types.Message, session: AsyncSession):
     for action in await orm_get_actions(session):
-        await message.answer(action.description)
+        await message.answer(action.descriptioncz)
     
 
 @user_private_router.message(or_f(F.text.lower() == "змінити мову🇺🇦/🇨🇿", F.text.lower() == 'změňte jazyk🇺🇦/🇨🇿'))
@@ -151,10 +160,10 @@ async def aboutus(message: types.Message):
     ]
     await message.answer_media_group(media=media)
 
-# @user_private_router.message(F.photo)
-# async def photo(message: types.Message):
-#     photo_data = message.photo[-1]
-#     await message.answer(f"{photo_data}")
+@user_private_router.message(F.photo)
+async def photo(message: types.Message):
+    photo_data = message.photo[-1]
+    await message.answer(f"{photo_data}")
 
 @user_private_router.message(or_f(F.text == 'Зворотній звязок☎️', F.text == 'Zpětná vazba☎️'))
 async def feedback(message: types.Message):
@@ -165,7 +174,11 @@ async def feedback(message: types.Message):
 async def reviews(message: types.Message):
     lang = db.get_lang(message.from_user.id)
     media = [
-        InputMediaPhoto(media=_("AgACAgIAAxkBAAIKqGbxqjyD2CbbWjlkekxraYUZktcVAAL55jEbCtWRS3D4js_QxFIoAQADAgADeQADNgQ", lang)),
+        InputMediaPhoto(media=_("AgACAgIAAxkBAAIREmcUwmgFOSaTh19GmP5_YgFI0hLhAAL1AAEyG9CLoEhNJWoCR7SciwEAAwIAA3kAAzYE", lang)),
+        InputMediaPhoto(media=_("AgACAgIAAxkBAAIRFGcUwm_ogzxY__MtVOt22q94Xd24AAL3AAEyG9CLoEj2TUoNrICJbAEAAwIAA3kAAzYE", lang)),
+        InputMediaPhoto(media=_("AgACAgIAAxkBAAIRFmcUwnlAqmAUqUrBgOBKUrqQ6HwcAAL5AAEyG9CLoEi6Z12NLg4e7QEAAwIAA3kAAzYE", lang)),
+        InputMediaPhoto(media=_("AgACAgIAAxkBAAIRGGcUwpGNgbQFR6GD7xxvuzgIk9VjAAL-AAEyG9CLoEisfcUmxHIGjgEAAwIAA3kAAzYE", lang)),
+        InputMediaPhoto(media=_("AgACAgIAAxkBAAIRGmcUwpdy9WkRO3Weq02Y9eymzKWPAAIDATIb0IugSGrkPml3j94cAQADAgADeQADNgQ", lang)),
     ]
     await message.answer_media_group(media=media)
 
@@ -495,15 +508,37 @@ async def process_phone_number(message: types.Message, state: FSMContext, sessio
                      f"Телефон: {phone_number}\n"
                      f"Продукти:\n{products_message}")
 
-    # Надсилаємо інформацію адміну
+    # Створюємо інлайн-клавіатуру з кнопкою "Підтвердити"
+    confirm_button = InlineKeyboardMarkup(inline_keyboard=[[
+        InlineKeyboardButton(text="Підтвердити✔️", callback_data=f"confirm_order_{message.from_user.id}")
+    ]])
+
+    # Надсилаємо інформацію адміну з інлайн-кнопкою
     for admin_id in admin_ids:
-        await bot.send_message(admin_id, order_summary)
-    await message.answer(_("Заказ оформлено, за додатковою інформацією: @Tetiana_Senkiv",lang))
+        await bot.send_message(admin_id, order_summary, reply_markup=confirm_button)
+
+    await message.answer(_("Оформлення заказу завершено! Незабаром його підтвердять. За додатковою інформацією: @Tetiana_Senkiv", lang))
     # Очищаємо кошик
-    await clear_cart(message.from_user.id, session)  # Використовуємо clear_cart, який в свою чергу використовує remove_from_cart
+    await clear_cart(message.from_user.id, session)
 
     # Завершення стану
-    await state.clear()  # Завершуємо стан
+    await state.clear()
+
+
+@user_private_router.callback_query(F.data.startswith('confirm_order_'))
+async def confirm_order(callback: types.CallbackQuery, bot: Bot):
+    data_parts = callback.data.split('_')
+    if len(data_parts) < 3 or not data_parts[2].isdigit():
+        await callback.answer("Помилка: недійсний формат підтвердження.", show_alert=True)
+        return
+
+    user_id = int(data_parts[2])  # Отримуємо ID користувача з callback data
+
+    # Надсилаємо користувачеві повідомлення про підтвердження замовлення
+    await bot.send_message(user_id, _("Ваше замовлення підтверджено!"))
+
+    # Надсилаємо адміну відповідь, що замовлення підтверджено
+    await callback.answer("Замовлення підтверджено.", show_alert=True)
 
 
 
