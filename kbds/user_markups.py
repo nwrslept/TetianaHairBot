@@ -16,8 +16,9 @@ def start_kb(lang):
     keyboard = ReplyKeyboardMarkup(
         keyboard=[
             [btnLang, btnSchedules],
-            [btnBuy, btnInfo],
-            [btnAbout, btnReviews, btnAction],
+            [btnBuy],
+            [btnInfo,btnAbout],
+            [btnReviews, btnAction],
             [btnFeedback],
         ],
         resize_keyboard=True

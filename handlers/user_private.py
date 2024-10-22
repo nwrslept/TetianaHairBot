@@ -136,7 +136,7 @@ async def schedule(message: types.Message, session: AsyncSession):
                                  reply_markup=get_callback_btns(btns={
                                       'записатись': f'signup_{schedule.id}'
                                  }))
-    await message.answer('А також можна замовити майстра до собе додому: @Tetiana_Senkiv')
+    await message.answer('А також можна замовити майстра до себе додому: @Tetiana_Senkiv')
 
 @user_private_router.message((F.text.lower() == "domluvit si schůzku📅"))
 async def schedule1(message: types.Message, session: AsyncSession):
@@ -498,7 +498,8 @@ async def process_phone_number(message: types.Message, state: FSMContext, sessio
     product_names = []
     for item in cart_items:
         product = item.product  # Отримуємо деталі товару через відношення
-        product_names.append(product.name)  # Додаємо назву продукту в список
+        product_names.append(product.name)
+        product_names.append(product.description)   # Додаємо опис продукту в список
 
     # Формуємо повідомлення
     products_message = "\n".join(product_names) if product_names else "Кошик порожній."
