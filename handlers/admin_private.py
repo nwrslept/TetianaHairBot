@@ -21,7 +21,7 @@ class AddProduct(StatesGroup):
     description = State()
     price = State()
     image = State()
-    namecz = State()          # Новий стан для чеської назви
+    namecz = State()       
     descriptioncz = State()
 
     product_for_change = None
@@ -109,7 +109,7 @@ async def delete_product_callback(callback: types.CallbackQuery, session: AsyncS
 async def schedule_list(message: types.Message, session: AsyncSession):
     if message.from_user.id in admin_ids:
         schedules = await check_isbusy(session)
-        if schedules:  # Якщо є доступні дати
+        if schedules:  
             for schedule in schedules:
                     await message.answer(f"Доступна дата: \n{schedule.date}\n{schedule.time}",
                                  reply_markup=get_callback_btns(btns={
@@ -144,6 +144,14 @@ async def starring_at_notes(message: types.Message, session: AsyncSession):
             ),
         )
             
+@admin_router.callback_query(F.data.startswith("deletenote_"))
+async def delete_note_callback(callback: types.CallbackQuery, session: AsyncSession):
+    note_id = callback.data.split("_")[-1]
+    await orm_delete_note(session, int(note_id))
+
+    await callback.answer("")
+    await callback.message.answer("Замітку видалено!")
+            
 @admin_router.message(F.text == "Список акцій")
 async def starring_at_actions(message: types.Message, session: AsyncSession):
     if message.from_user.id in admin_ids:
@@ -166,13 +174,7 @@ async def delete_action_callback(callback: types.CallbackQuery, session: AsyncSe
     await callback.answer("Акцію видалено!")
     await callback.message.answer("Акцію видалено!")
 
-
  #FSM
-
-
-
-
-
 
 @admin_router.callback_query(StateFilter(None), F.data.startswith("changeschedule_"))
 async def change_schedule_callback(
@@ -299,7 +301,7 @@ async def add_name(message: types.Message, state: FSMContext):
             return
         await state.update_data(name=message.text)
     await message.answer("Введіть чеську назву продукту")
-    await state.set_state(AddProduct.namecz)  # Перехід до введення чеської назви
+    await state.set_state(AddProduct.namecz)  
 
 @admin_router.message(AddProduct.namecz, or_f(F.text, F.text == "."))
 async def add_namecz(message: types.Message, state: FSMContext):
@@ -328,7 +330,7 @@ async def add_description(message: types.Message, state: FSMContext):
     else:
         await state.update_data(description=message.text)
     await message.answer("Введіть чеський опис продукту")
-    await state.set_state(AddProduct.descriptioncz)  # Перехід до введення чеського опису
+    await state.set_state(AddProduct.descriptioncz) 
 
 
 @admin_router.message(AddProduct.descriptioncz, or_f(F.text, F.text == "."))
@@ -421,18 +423,15 @@ async def add_description_cz_action(message: types.Message, state: FSMContext, s
     
     try:
         await orm_add_action(session, data)
-        await session.commit()  # Коміт змін
+        await session.commit()  
         await message.answer("Акцію додано", reply_markup=admin_markups.admin_kb.as_markup(
                                   resize_keyboard=True,
                                   input_field_placeholder='Що вас цікавить?'))
     except Exception as e:
         await message.answer(f"Сталася помилка при додаванні акції: {str(e)}")
 
-    
-    # Отримання списку користувачів
     user_ids = db.get_all_user_ids()
     
-    # Надсилання повідомлень користувачам на відповідній мові
     for user_id in user_ids:
         lang = db.get_lang(user_id)
         if lang == 'ua':

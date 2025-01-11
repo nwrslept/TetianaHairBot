@@ -96,17 +96,14 @@ async def orm_delete_product(session: AsyncSession, product_id: int):
 
 
 async def add_to_cart(user_id: int, product_id: int, quantity: int, session: AsyncSession):
-    # Перевіряємо, чи цей товар вже є в кошику
     existing_cart_item = await session.execute(
         select(Cart).where(Cart.user_id == user_id, Cart.product_id == product_id)
     )
     cart_item = existing_cart_item.scalar_one_or_none()
 
     if cart_item:
-        # Якщо товар вже в кошику, оновлюємо кількість
         cart_item.quantity += quantity
     else:
-        # Якщо товару ще немає в кошику, додаємо новий запис
         new_cart_item = Cart(user_id=user_id, product_id=product_id, quantity=quantity)
         session.add(new_cart_item)
 
@@ -114,14 +111,12 @@ async def add_to_cart(user_id: int, product_id: int, quantity: int, session: Asy
 
 
 async def remove_from_cart(user_id: int, product_id: int, session: AsyncSession):
-    # Шукаємо товар у кошику
     cart_item = await session.execute(
         select(Cart).where(Cart.user_id == user_id, Cart.product_id == product_id)
     )
     cart_item = cart_item.scalar_one_or_none()
 
     if cart_item:
-        # Видаляємо товар з кошика
         await session.delete(cart_item)
         await session.commit()
     else:
@@ -131,17 +126,17 @@ async def get_cart(user_id: int, session: Session):
     cart_items = await session.execute(
         select(Cart).where(Cart.user_id == user_id).options(joinedload(Cart.product))
     )
-    return cart_items.scalars().all()  # Повертаємо всі товари у кошику
+    return cart_items.scalars().all() 
 
 async def clear_cart(user_id: int, session: AsyncSession):
-    # Отримуємо всі продукти з кошика користувача
+ 
     cart_items = await session.execute(
         select(Cart).where(Cart.user_id == user_id)
     )
-    cart_items = cart_items.scalars().all()  # Отримуємо всі товари у кошику
+    cart_items = cart_items.scalars().all() 
 
     for item in cart_items:
-        await remove_from_cart(user_id, item.product_id, session)  # Видаляємо кожен товар з кошика
+        await remove_from_cart(user_id, item.product_id, session) 
 
 
 
@@ -211,7 +206,7 @@ async def orm_delete_action(session: AsyncSession, action_id: int):
 class Database:
     def __init__(self, db_file):
         self.engine = create_engine(f'sqlite:///{db_file}')
-        Base.metadata.create_all(self.engine)  # Створення таблиць, якщо їх немає
+        Base.metadata.create_all(self.engine) 
         self.Session = sessionmaker(bind=self.engine)
 
     def user_exists(self, user_id):
@@ -245,7 +240,7 @@ class Database:
 class UserDB:
     def __init__(self, db_file='my_base.db'):
         self.engine = create_engine(f'sqlite:///{db_file}')
-        Base.metadata.create_all(self.engine)  # Створення таблиці, якщо її немає
+        Base.metadata.create_all(self.engine)  
         self.Session = sessionmaker(bind=self.engine)
 
     def add_user(self, id_product, user_id, full_name, index_adress, number_phon):

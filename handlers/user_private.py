@@ -4,7 +4,7 @@ from aiogram.filters import CommandStart, Command, or_f
 
 from aiogram.fsm.state import StatesGroup, State
 from aiogram.fsm.context import FSMContext
-from aiogram.types import Message, CallbackQuery, InputMediaPhoto, InlineKeyboardButton, InlineKeyboardMarkup
+from aiogram.types import InputMediaPhoto, InlineKeyboardButton, InlineKeyboardMarkup
 from sqlalchemy.ext.asyncio import AsyncSession
 from database.orm_query import clear_cart, get_cart, orm_get_actions, user_db  
 
@@ -40,9 +40,16 @@ admin_ids = [int(admin_id) for admin_id in admin_ids]
 
 
 @user_private_router.message(CommandStart())
-async def start_cmd(message: types.Message):
+async def start_cmd(message: types.Message, bot:Bot):
     if not db.user_exists(message.from_user.id):
         await message.answer("Виберіть мову:\nVyberte jazyk:", reply_markup=nav.langMenu)
+        user = message.from_user.username
+        for admin_id in admin_ids:
+            await bot.send_message(
+            admin_id,
+            f"Зареєструвався новий користувач: @{user}"
+        )
+        
     else:
         lang = db.get_lang(message.from_user.id)
         await message.answer(_("Ласкаво просимо!", lang), reply_markup=nav.start_kb(lang))
@@ -56,11 +63,9 @@ async def setLanguage(callback: types.callback_query):
             db.add_user(callback.from_user.id, lang)
             await callback.message.answer(_("Успішна реєстрація!", lang), reply_markup=nav.start_kb(lang))
         else:
-            # Якщо користувач вже існує, просто оновлюємо його мову
-            db.update_lang(callback.from_user.id, lang)  # Оновлюємо мову
+            db.update_lang(callback.from_user.id, lang)  
             await callback.message.answer(_("Мову успішно змінено!", lang), reply_markup=nav.start_kb(lang))
     else:
-        # Обробляємо некоректні дані, наприклад, якщо `callback.data` містить некоректний формат
         await callback.message.answer(_("Невірний формат вибору мови.", lang))
 
 
@@ -130,7 +135,7 @@ async def menu_cmd(message: types.Message):
 @user_private_router.message((F.text.lower() == "записатись на прийом📅"))
 async def schedule(message: types.Message, session: AsyncSession):
     schedules = await check_isbusy(session)
-    if schedules:  # Якщо є доступні дати
+    if schedules:
         for schedule in schedules:
             await message.answer(f'Доступна дата:\n{schedule.date}📅\n{schedule.time}🕒',
                                  reply_markup=get_callback_btns(btns={
@@ -141,7 +146,7 @@ async def schedule(message: types.Message, session: AsyncSession):
 @user_private_router.message((F.text.lower() == "domluvit si schůzku📅"))
 async def schedule1(message: types.Message, session: AsyncSession):
     schedules = await check_isbusy(session)
-    if schedules:  # Якщо є доступні дати
+    if schedules:
         for schedule in schedules:       
             await message.answer(f'Dostupné datum: \n{schedule.date}📅\n{schedule.time}🕒',
                                  reply_markup=get_callback_btns(btns={
@@ -160,10 +165,10 @@ async def aboutus(message: types.Message):
     ]
     await message.answer_media_group(media=media)
 
-@user_private_router.message(F.photo)
-async def photo(message: types.Message):
-    photo_data = message.photo[-1]
-    await message.answer(f"{photo_data}")
+# @user_private_router.message(F.photo)
+# async def photo(message: types.Message):
+#     photo_data = message.photo[-1]
+#     await message.answer(f"{photo_data}")
 
 @user_private_router.message(or_f(F.text == 'Зворотній звязок☎️', F.text == 'Zpětná vazba☎️'))
 async def feedback(message: types.Message):
@@ -192,10 +197,8 @@ async def buy(message: types.Message, session: AsyncSession, state: FSMContext):
     lang = db.get_lang(message.from_user.id)
     products = await orm_get_products(session)
     
-    # Зберегти всі продукти в стан
     await state.update_data(products=[product.id for product in products], current_index=0)
 
-    # Показати перший продукт
     if products:
         reply_message = await show_product(message, products[0], lang, 0)
         await state.update_data(reply_message_id=reply_message.message_id)
@@ -231,7 +234,7 @@ async def show_product(message: types.Message, product, lang, index):
         ),
     )
 
-    return reply_message  # Повертаємо надіслане повідомлення
+    return reply_message  
 
 @user_private_router.callback_query(F.data.startswith('prev_'))
 async def show_previous(callback: types.CallbackQuery, state: FSMContext, session: AsyncSession):
@@ -258,14 +261,13 @@ async def show_next(callback: types.CallbackQuery, state: FSMContext, session: A
         await update_product_message(callback.message, products[current_index], lang, current_index, session)
 
 async def update_product_message(message: types.Message, product_id: int, lang, index: int, session: AsyncSession):
-    # Отримуємо продукт з бази даних за ID
     product = await orm_get_product(session, product_id)
     
     if product:
-        if lang == 'ua': # Перевіряємо, чи продукт існує
+        if lang == 'ua': 
             await message.edit_media(
                 types.InputMediaPhoto(
-                    media=product.image,  # Замість product.image використовуйте media
+                    media=product.image, 
                     caption=f"{product.name}\n{product.description}\n{round(product.price, 2)}kč"
                 ),
                 reply_markup=get_callback_btns(
@@ -280,7 +282,7 @@ async def update_product_message(message: types.Message, product_id: int, lang, 
         else:
             await message.edit_media(
             types.InputMediaPhoto(
-                media=product.image,  # Замість product.image використовуйте media
+                media=product.image,
                 caption=f"{product.namecz}\n{product.descriptioncz}\n{round(product.price, 2)}kč"
             ),
             reply_markup=get_callback_btns(
@@ -305,7 +307,6 @@ async def remove_from_cart1(callback: types.CallbackQuery, session: AsyncSession
     user_id = callback.from_user.id
     product_id = int(callback.data.split('_')[-1])
     
-    # Видалити товар з кошика
     await remove_from_cart(user_id, product_id, session)
     await callback.message.answer(_("Товар видалено з корзини", lang))
 
@@ -316,7 +317,6 @@ async def add_to_cart1(callback: types.CallbackQuery, session: AsyncSession):
     user_id = callback.from_user.id
     product_id = int(callback.data.split('_')[-1])
     
-    # Додати товар до корзини через базу даних
     await add_to_cart(user_id, product_id, 1, session)
     await callback.message.answer(_("Товар додано до корзини!", lang))
 
@@ -325,14 +325,13 @@ async def view_cart(callback: types.CallbackQuery, session: AsyncSession):
     lang = db.get_lang(callback.from_user.id)
     user_id = callback.from_user.id
     
-    # Отримати вміст кошика з бази даних
     cart_items = await get_cart(user_id, session)
     
     if not cart_items:
         await callback.message.answer(_("Ваша корзина порожня", lang))
     else:
         for item in cart_items:
-            product = item.product  # Отримуємо деталі товару через відношення
+            product = item.product
             await callback.message.answer_photo(
                 product.image,
                 caption=f"{product.name}\n{product.description}\n{round(product.price, 2)}kč",
@@ -354,10 +353,12 @@ async def view_cart(callback: types.CallbackQuery, session: AsyncSession):
 @user_private_router.callback_query(F.data.startswith('signup_'))
 async def delete_schedule(callback: types.callback_query, session: AsyncSession, bot: Bot):
     user = callback.from_user.username
+    user_id=callback.from_user.id
     schedule_id= callback.data.split("_")[-1]
     schedule_for_change = await orm_get_schedule(session, int(schedule_id))
     await callback.message.answer(f"Ви успішно записались на {schedule_for_change.date}, о {schedule_for_change.time}\
                                   \nЧекаємо вас за адресою: Hlavni 1215,\
+                                  \nСкоро ваш запис підтвердять!\
                                   \nЗа додатковою інформацією: @Tetiana_Senkiv", 
                                   reply_markup=get_callback_btns(btns={
                                      'Отримати геолокацію': f'send_location',
@@ -368,9 +369,24 @@ async def delete_schedule(callback: types.callback_query, session: AsyncSession,
         "time": schedule_for_change.time,
         "isbusy": True  # Змінюємо isbusy на True
     })
+    confirm_button = InlineKeyboardMarkup(inline_keyboard=[[
+        InlineKeyboardButton(text="Підтвердити✔️", callback_data=f"confirm__{user_id}")
+    ]])
     for admin_id in admin_ids:
-        await bot.send_message(admin_id, f"Користувач @{user} записався на {schedule_for_change.date}, о {schedule_for_change.time}")
-    #await orm_delete_schedule(session, int(schedule_id))
+        await bot.send_message(
+            admin_id,
+            f"Користувач @{user} записався на {schedule_for_change.date}, о {schedule_for_change.time}",
+            reply_markup=confirm_button
+        )
+
+@user_private_router.callback_query(F.data.startswith('confirm_'))
+async def confirm_schedule(callback: types.callback_query, session: AsyncSession, bot: Bot):
+    user_id = int(callback.data.split("_")[-1])  
+    
+    await bot.send_message(user_id, "Ваш запис підтверджено!")
+    
+    await callback.answer("Запис підтверджено")
+
 
 @user_private_router.callback_query(F.data.startswith('signup1_'))
 async def delete_schedule1(callback: types.callback_query, session: AsyncSession, bot: Bot):
@@ -379,6 +395,7 @@ async def delete_schedule1(callback: types.callback_query, session: AsyncSession
     schedule_for_change = await orm_get_schedule(session, int(schedule_id))
     await callback.message.answer(f"Úspěšně jste se zaregistrovali do {schedule_for_change.date}, {schedule_for_change.time}\
                                   \nČekáme na vás na Hlavní 1215,\
+                                  \nVaše zadání bude brzy potvrzeno!\
                                   \nDalší informace: @Tetiana_Senkiv", 
                                   reply_markup=get_callback_btns(btns={
                                      'Získejte geolokaci': f'send_location',
@@ -387,7 +404,7 @@ async def delete_schedule1(callback: types.callback_query, session: AsyncSession
     await orm_update_schedule(session, int(schedule_id), {
         "date": schedule_for_change.date,
         "time": schedule_for_change.time,
-        "isbusy": True  # Змінюємо isbusy на True
+        "isbusy": True  
     })
     for admin_id in admin_ids:
         await bot.send_message(admin_id, f"Користувач @{user} записався на {schedule_for_change.date}, о {schedule_for_change.time}")
@@ -404,7 +421,7 @@ async def cancel_schedule(callback: types.callback_query, session: AsyncSession,
     await orm_update_schedule(session, schedule_id, {
         "date": schedule_for_change.date,
         "time": schedule_for_change.time,
-        "isbusy": False  # Змінюємо isbusy на False
+        "isbusy": False  
     })
     await callback.message.answer(f"Ви відмінили запис на {schedule_for_change.date}, о {schedule_for_change.time}")
     await callback.answer("Ваш запис скасовано!", show_alert=True)
@@ -424,7 +441,7 @@ async def cancel1_schedule(callback: types.callback_query, session: AsyncSession
     await orm_update_schedule(session, schedule_id, {
         "date": schedule_for_change.date,
         "time": schedule_for_change.time,
-        "isbusy": False  # Змінюємо isbusy на False
+        "isbusy": False 
     })
     await callback.message.answer(f"Nahrávání jste zrušili dne {schedule_for_change.date}, {schedule_for_change.time}")
     await callback.answer("Váš záznam byl zrušen!", show_alert=True)
@@ -450,12 +467,10 @@ async def process_order(callback: types.CallbackQuery, session: AsyncSession, st
 
     product_id = int(data_parts[1])
     
-    # Зберігаємо ID продукту в стані
     await state.update_data(product_id=product_id)
     
-    # Запитуємо користувача про його ФІО
     await callback.message.answer(_("Введіть ФІО. (повні)",lang))
-    await state.set_state(OrderInfo.full_name)  # Встановлюємо стан для отримання ФІО
+    await state.set_state(OrderInfo.full_name) 
 
 
 
@@ -464,44 +479,41 @@ async def process_full_name(message: types.Message, state: FSMContext):
     full_name = message.text
     lang = db.get_lang(message.from_user.id)
 
-    await state.update_data(full_name=full_name)  # Зберігаємо ФІО в стані
+    await state.update_data(full_name=full_name)
     
     await message.answer(_("Укажіть індекс і адресу доставки",lang))
-    await state.set_state(OrderInfo.address)  # Встановлюємо стан для адреси
+    await state.set_state(OrderInfo.address) 
 
 @user_private_router.message(OrderInfo.address)
 async def process_address(message: types.Message, state: FSMContext):
     address = message.text
     lang = db.get_lang(message.from_user.id)
 
-    await state.update_data(address=address)  # Зберігаємо адресу в стані
+    await state.update_data(address=address)
     
     await message.answer(_("Введіть номер телефону починаючи з: +380, або +420",lang))
-    await state.set_state(OrderInfo.phone_number)  # Встановлюємо стан для номера телефону
+    await state.set_state(OrderInfo.phone_number) 
 
 @user_private_router.message(OrderInfo.phone_number)
 async def process_phone_number(message: types.Message, state: FSMContext, session: AsyncSession, bot: Bot):
     phone_number = message.text
-    await state.update_data(phone_number=phone_number)  # Зберігаємо номер телефону в стані
+    await state.update_data(phone_number=phone_number) 
 
     lang = db.get_lang(message.from_user.id)
-    user_data = await state.get_data()  # Отримуємо всі дані
+    user_data = await state.get_data()  
     full_name = user_data.get('full_name')
     address = user_data.get('address')
 
-    # Отримуємо ім'я користувача
     username = message.from_user.username if message.from_user.username else "Немає імені користувача"
     
-    cart_items = await get_cart(message.from_user.id, session)  # Отримуємо вміст кошика
+    cart_items = await get_cart(message.from_user.id, session)  
 
-    # Формуємо список назв продуктів
     product_names = []
     for item in cart_items:
-        product = item.product  # Отримуємо деталі товару через відношення
+        product = item.product
         product_names.append(product.name)
-        product_names.append(product.description)   # Додаємо опис продукту в список
+        product_names.append(product.description) 
 
-    # Формуємо повідомлення
     products_message = "\n".join(product_names) if product_names else "Кошик порожній."
     order_summary = (f"Нове замовлення від користувача: @{username}\n"
                      f"ФІО: {full_name}\n"
@@ -509,20 +521,16 @@ async def process_phone_number(message: types.Message, state: FSMContext, sessio
                      f"Телефон: {phone_number}\n"
                      f"Продукти:\n{products_message}")
 
-    # Створюємо інлайн-клавіатуру з кнопкою "Підтвердити"
     confirm_button = InlineKeyboardMarkup(inline_keyboard=[[
         InlineKeyboardButton(text="Підтвердити✔️", callback_data=f"confirm_order_{message.from_user.id}")
     ]])
 
-    # Надсилаємо інформацію адміну з інлайн-кнопкою
     for admin_id in admin_ids:
         await bot.send_message(admin_id, order_summary, reply_markup=confirm_button)
 
     await message.answer(_("Оформлення заказу завершено! Незабаром його підтвердять. За додатковою інформацією: @Tetiana_Senkiv", lang))
-    # Очищаємо кошик
     await clear_cart(message.from_user.id, session)
 
-    # Завершення стану
     await state.clear()
 
 
@@ -533,12 +541,10 @@ async def confirm_order(callback: types.CallbackQuery, bot: Bot):
         await callback.answer("Помилка: недійсний формат підтвердження.", show_alert=True)
         return
 
-    user_id = int(data_parts[2])  # Отримуємо ID користувача з callback data
+    user_id = int(data_parts[2])  
 
-    # Надсилаємо користувачеві повідомлення про підтвердження замовлення
     await bot.send_message(user_id, _("Ваше замовлення підтверджено!"))
 
-    # Надсилаємо адміну відповідь, що замовлення підтверджено
     await callback.answer("Замовлення підтверджено.", show_alert=True)
 
 
